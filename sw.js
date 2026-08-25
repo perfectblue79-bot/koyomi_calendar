@@ -1,4 +1,4 @@
-const CACHE_NAME = "kanshi-goyomi-v1";
+const CACHE_NAME = "kanshi-goyomi-v2";
 const ASSETS = [
   "./",
   "./index.html",
@@ -25,8 +25,25 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+// HTML/マニフェストは「まずネット経由で最新を取りに行き、失敗したらキャッシュ」にする。
+// これで更新のたびに古い表示のまま固定されてしまう問題を防ぐ。
 self.addEventListener("fetch", (event) => {
-  event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
-  );
+  const req = event.request;
+  const isPage = req.mode === "navigate" || req.url.endsWith(".html") || req.url.endsWith("manifest.json");
+
+  if (isPage) {
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          const resClone = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, resClone));
+          return res;
+        })
+        .catch(() => caches.match(req))
+    );
+  } else {
+    event.respondWith(
+      caches.match(req).then((cached) => cached || fetch(req))
+    );
+  }
 });
