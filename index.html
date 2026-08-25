@@ -171,12 +171,35 @@
     background:rgba(251,246,234,0.06);
     border:1px solid rgba(251,246,234,0.15);
     border-radius:6px;
-    padding:14px 16px;
+    padding:14px 14px 12px;
+  }
+  .pillars{
+    display:flex;
+    justify-content:center;
+    gap:8px;
+  }
+  .pillar{
+    flex:1;
+    max-width:120px;
+    text-align:center;
+    padding:8px 4px;
+    border-radius:5px;
+    background:rgba(251,246,234,0.04);
+  }
+  .pillar.main{
+    background:rgba(193,39,45,0.10);
+    border:1px solid rgba(193,39,45,0.35);
+  }
+  .plabel{font-size:10px; color:var(--gold); letter-spacing:0.2em; margin-bottom:4px;}
+  .pvalue{font-family:'Noto Serif JP', serif; font-size:21px; letter-spacing:0.08em;}
+  .pillar.main .pvalue{color:var(--vermillion);}
+  .note{
+    margin-top:10px;
+    font-size:10px;
+    line-height:1.5;
+    color:rgba(251,246,234,0.4);
     text-align:center;
   }
-  .detail .label{font-size:11px; color:var(--gold); letter-spacing:0.15em; margin-bottom:4px;}
-  .detail .value{font-family:'Noto Serif JP', serif; font-size:22px; letter-spacing:0.1em;}
-  .detail .value span{font-size:13px; color:rgba(251,246,234,0.55); margin-left:6px;}
 </style>
 </head>
 <body>
@@ -225,6 +248,66 @@ function kanshiIndex(y, m, d){
 function kanshiStr(y, m, d){
   const idx = kanshiIndex(y, m, d);
   return STEMS[idx % 10] + BRANCHES[idx % 12];
+}
+
+// ---- 年干支・月干支 ----
+// 暦上の「年」は立春(2/4頃)で切り替わる。月は1日ではなく節気(下記12個)で切り替わる。
+// 節気の日付は年によって±1日ずれることがあるため、ここでは代表的な日付で近似しています。
+const SEKKI = [
+  {m:2, d:4},  // 立春 -> 寅月開始
+  {m:3, d:6},  // 啓蟄 -> 卯月
+  {m:4, d:5},  // 清明 -> 辰月
+  {m:5, d:6},  // 立夏 -> 巳月
+  {m:6, d:6},  // 芒種 -> 午月
+  {m:7, d:7},  // 小暑 -> 未月
+  {m:8, d:8},  // 立秋 -> 申月
+  {m:9, d:8},  // 白露 -> 酉月
+  {m:10, d:8}, // 寒露 -> 戌月
+  {m:11, d:7}, // 立冬 -> 亥月
+  {m:12, d:7}, // 大雪 -> 子月
+  {m:1, d:6}   // 小寒 -> 丑月(暦の年としては前年扱い)
+];
+
+function effYear(y, m0, d){
+  // m0は0始まりの月。立春(2/4)より前なら、暦上はまだ前年。
+  const risshun = new Date(y, 1, 4);
+  const target = new Date(y, m0, d);
+  return target < risshun ? y - 1 : y;
+}
+
+function yearIndex60(y, m0, d){
+  const ey = effYear(y, m0, d);
+  let idx = (ey - 4) % 60;
+  if (idx < 0) idx += 60;
+  return idx;
+}
+
+function monthSlotIndex(y, m0, d){
+  // 0=寅月(立春〜) ... 11=丑月(小寒〜立春前)
+  const ey = effYear(y, m0, d);
+  const target = new Date(y, m0, d);
+  const bounds = SEKKI.map((s, i) => {
+    const yy = (i === 11) ? ey + 1 : ey; // 小寒は暦上の翌年カレンダー月
+    return { idx: i, date: new Date(yy, s.m - 1, s.d) };
+  });
+  let chosen = bounds[0];
+  for (const b of bounds) { if (b.date <= target) chosen = b; }
+  return chosen.idx;
+}
+
+function yearKanshiStr(y, m0, d){
+  const idx = yearIndex60(y, m0, d);
+  return STEMS[idx % 10] + BRANCHES[idx % 12];
+}
+
+function monthKanshiStr(y, m0, d){
+  const yIdx = yearIndex60(y, m0, d);
+  const yearStem = yIdx % 10;
+  const startStem = (2 * (yearStem % 5) + 2) % 10; // 五虎遁の法(寅月の干)
+  const slot = monthSlotIndex(y, m0, d); // 0=寅...11=丑
+  const stem = (startStem + slot) % 10;
+  const branch = (2 + slot) % 12; // 寅=2
+  return STEMS[stem] + BRANCHES[branch];
 }
 
 const today = new Date();
@@ -276,9 +359,12 @@ function render(){
   const ty = today.getFullYear(), tm = today.getMonth(), td = today.getDate();
   const idx = kanshiIndex(ty, tm, td);
   detail.innerHTML =
-    '<div class="label">本日の干支</div>' +
-    '<div class="value">' + kanshiStr(ty, tm, td) +
-    '<span>60干支中 第' + (idx+1) + '番</span></div>';
+    '<div class="pillars">' +
+      '<div class="pillar"><div class="plabel">年柱</div><div class="pvalue">' + yearKanshiStr(ty, tm, td) + '</div></div>' +
+      '<div class="pillar"><div class="plabel">月柱</div><div class="pvalue">' + monthKanshiStr(ty, tm, td) + '</div></div>' +
+      '<div class="pillar main"><div class="plabel">日柱</div><div class="pvalue">' + kanshiStr(ty, tm, td) + '</div></div>' +
+    '</div>' +
+    '<div class="note">日柱は60干支中 第' + (idx+1) + '番　※月柱・年柱の節切り日は年により前後1日ずれる場合があります</div>';
 }
 
 document.getElementById('prev').onclick = ()=>{
